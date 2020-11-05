@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const validator = require("validator");
-const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 
 const userSchema = new mongoose.Schema(
   {
@@ -46,17 +47,7 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Hash the plain text password before saving
-userSchema.pre("save", async function (next) {
-  const user = this;
-
-  if (user.isModified("password")) {
-    user.password = await bcrypt.hash(user.password, 8);
-  }
-
-  next();
-});
-
+// Hash the plain password
 userSchema.pre("save", function (next) {
   const user = this;
   if (!user.isModified("password")) {
@@ -77,3 +68,33 @@ userSchema.pre("save", function (next) {
     });
   });
 });
+
+// Find a user by providing a mail and a password
+userSchema.statics.findByCredentials = async (email, password) => {
+  const user = await User.findOne({ email })
+
+  if (!user) {
+      throw new Error('Unable to user')
+  }
+
+  const isMatch = await bcrypt.compare(password, user.password)
+
+  if (!isMatch) {
+      throw new Error('Unable to match')
+  }
+
+  return user
+}
+
+// Generate a token and add it to tokens array
+userSchema.methods.generateAuthToken = async function () {
+  const user = this
+  const token = jwt.sign({ _id: user.id.toString() }, 'MY_SECRET_KEY')
+
+  user.tokens = user.tokens.concat({ token })
+  await user.save()
+  
+  return token
+}
+
+mongoose.model('User', userSchema);
